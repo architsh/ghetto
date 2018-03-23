@@ -99,6 +99,7 @@ module lc4_processor
    assign d_insn_update (d_is_stall) ? 16'b0 : d_insn;
    wire [1:0] d_stall;
    assign d_stall (d_is_stall) ? 2'b11 : ((x_pc_ctl) ? 2'b10 : (((f_pc == 16'h8200) ? 1'b1 : 1'b0) ? 2'b10 : 2'b00));
+   
  
    
    
