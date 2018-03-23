@@ -34,6 +34,96 @@ module lc4_processor
     );
    
    /*** YOUR CODE HERE ***/
+   
+   // in to D reg
+   wire [15:0] f_pc;
+   wire [15:0] i_curr_insn;
+   wire [15:0] pc_plus_one;
+   
+   // out of D reg
+   wire [15:0] d_pc;
+   wire [15:0] d_i_curr_insn;
+   wire [15:0] d_pc_plus_one;
+   
+   // D register
+   Nbit_reg #(16, 16'h0000) d_pc_reg (.in(f_pc), .out(d_pc), .clk(clk), .we(1'b1), .gwe(gwe), .rst(rst));
+   Nbit_reg #(16, 16'h0000) d_insn_reg (.in(i_curr_insn), .out(d_i_curr_insn), .clk(clk), .we(1'b1), .gwe(gwe), .rst(rst));
+   Nbit_reg #(16, 16'h0000) d_pc_plus_one_reg (.in(pc_plus_one), .out(d_pc_plus_one), .clk(clk), .we(1'b1), .gwe(gwe), .rst(rst));
+  
+   
+   // Decoder
+   wire [2:0] d_r1sel;
+   wire d_r1re;
+   wire [2:0] d_r2sel;
+   wire d_r2re;
+   wire [2:0] d_wsel;
+   wire d_regfile_we;
+   wire d_nzp_we;
+   wire d_select_pc_plus_one;
+   wire d_is_store;
+   wire d_is_load;
+   wire d_is_branch;
+   wire d_is_control_insn;
+   wire d_alu_src = ~d_r2re;
+   // decoder module
+   lc4_decoder decoder(.insn(d_insn), .r1sel(d_r1sel), .r1re(d_r1re), .r2sel(d_r2sel), .r2re(d_r2re), .wsel(d_wsel), 
+   .regfile_we(d_regfile_we), .nzp_we(d_nzp_we), .select_pc_plus_one(d_select_pc_plus_one), .is_load(d_is_load), .is_store(d_is_store), 
+   .is_branch(d_is_branch), is_control_insn.(d_is_control_insn));
+   
+   
+   // Regfile
+   wire [15:0] d_rs_out;
+   wire [15:0] d_rt_out;
+   lc4_regfile #(16) regfile(.clk(clk), .gwe(gwe), .rst(rst), .i_rs(d_r1sel), .o_rs_data(d_rs_out), 
+   .i_rt(d_r2sel), .o_rt_data(d_rt_out), .i_rd(w_wsel), .i_wdata(w_rd_data), .i_rd_we(w_regfile_we));
+   
+   
+   // r1 and r2 results
+   wire [15:0] d_r1_result;
+   wire [15:0] d_r2_result;
+   wire w_wsel_eq_d_r1sel;
+   wire w_wsel_eq_d_r2sel;
+   assign w_wsel_eq_d_r1sel (d_r1sel == w_wsel) ? 1'b1 : 1'b0;
+   assign w_wsel_eq_d_r2sel (d_r2sel == w_wsel) ? 1'b1 : 1'b0;
+   assign d_r1_result (w_wsel_eq_d_r1sel) ? w_rd_data : d_rs_out;
+   assign d_r2_result (w_wsel_eq_d_r2sel) ? w_rd_data : d_rt_out;
+
+   
+   // Stall
+   wire x_wsel_eq_d_r1sel;
+   wire x_wsel_eq_d_r2sel;
+   assign x_wsel_eq_d_r1sel (d_r1sel == x_wsel) ? 1'b1 : 1'b0;
+   assign x_wsel_eq_d_r2sel (d_r2sel == x_wsel) ? 1'b1 : 1'b0;
+   wire d_is_stall = (x_wsel_eq_d_r1sel | (x_wsel_eq_r2sel & ~d_is_store)) & x_is_load;
+   wire [15:0] d_insn_update;
+   assign d_insn_update (d_is_stall) ? 16'b0 : d_insn;
+   wire [1:0] d_stall;
+   assign d_stall (d_is_stall) ? 2'b11 : ((x_pc_ctl) ? 2'b10 : (((f_pc == 16'h8200) ? 1'b1 : 1'b0) ? 2'b10 : 2'b00));
+ 
+   
+   
+   // X register 
+   Nbit_reg #(16, 16'h0000) x_pc_reg (.in(d_pc), .out(x_pc), .clk(clk), .we(1'b1), .gwe(gwe), .rst(rst));
+   Nbit_reg #(16, 16'h0000) x_insn_reg (.in(d_insn_update), .out(x_insn), .clk(clk), .we(1'b1), .gwe(gwe), .rst(rst));
+   Nbit_reg #(16, 16'h0000) x_r1out_reg (.in(d_r1_result), .out(x_r1out), .clk(clk), .we(1'b1), .gwe(gwe), .rst(rst));
+   Nbit_reg #(16, 16'h0000) x_r2out_reg (.in(d_r2_result), .out(x_r2out), .clk(clk), .we(1'b1), .gwe(gwe), .rst(rst));
+   Nbit_reg #(16, 16'h0000) x_r1sel_reg (.in(d_r1sel), .out(x_r1sel), .clk(clk), .we(1'b1), .gwe(gwe), .rst(rst));
+   Nbit_reg #(16, 16'h0000) x_r2sel_reg (.in(d_r2sel), .out(x_r2sel), .clk(clk), .we(1'b1), .gwe(gwe), .rst(rst));
+   Nbit_reg #(16, 16'h0000) x_wsel_reg (.in(d_wsel), .out(x_wsel), .clk(clk), .we(1'b1), .gwe(gwe), .rst(rst));  
+   Nbit_reg #(16, 16'h0000) x_regfile_we_reg (.in(d_regfile_we), .out(x_regfile_we), .clk(clk), .we(1'b1), .gwe(gwe), .rst(rst)); 
+   Nbit_reg #(16, 16'h0000) x_nzp_we_reg (.in(d_nzp_we), .out(x_nzp_we), .clk(clk), .we(1'b1), .gwe(gwe), .rst(rst));
+   Nbit_reg #(16, 16'h0000) x_is_store_reg (.in(d_is_store), .out(x_is_store), .clk(clk), .we(1'b1), .gwe(gwe), .rst(rst));
+   Nbit_reg #(16, 16'h0000) x_is_load_reg (.in(d_is_load), .out(x_is_load), .clk(clk), .we(1'b1), .gwe(gwe), .rst(rst)); 
+   Nbit_reg #(16, 16'h0000) x_is_branch_reg (.in(d_is_branch), .out(x_is_branch), .clk(clk), .we(1'b1), .gwe(gwe), .rst(rst)); 
+   Nbit_reg #(16, 16'h0000) x_is_control_insn_reg (.in(d_is_control_insn), .out(x_is_control_insn), .clk(clk), .we(1'b1), .gwe(gwe), .rst(rst));
+   Nbit_reg #(16, 16'h0000) x_select_pc_plus_one_reg (.in(d_select_pc_plus_one), .out(x_select_pc_plus_one), .clk(clk), .we(1'b1), .gwe(gwe), .rst(rst));
+   Nbit_reg #(16, 16'h0000) x_pc_plus_one_reg (.in(d_pc_plus_one), .out(x_pc_plus_one), .clk(clk), .we(1'b1), .gwe(gwe), .rst(rst));
+   Nbit_reg #(16, 16'h0000) x_alu_src_reg (.in(d_alu_src), .out(x_alu_src), .clk(clk), .we(1'b1), .gwe(gwe), .rst(rst));
+   Nbit_reg #(16, 16'h0000) x_stall_reg (.in(d_stall), .out(x_stall), .clk(clk), .we(1'b1), .gwe(gwe), .rst(rst));
+ 
+   
+  
+  
 
 
   
