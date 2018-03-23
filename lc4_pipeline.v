@@ -273,11 +273,78 @@ module lc4_processor
 
     assign o_dmem_addr = m_addr_to_write;
     
+    wire m1;
+
+    assign m1 = (w_sel == m_r2sel) ? 1'b1 : 1'b0;
+
+    wire mw_bypass_l;
+
+    assign mw_bypass_l = m1 & m_is_load & m_is_store;
+
+    wire [15:0] m3;
+
+    assign m3 = (mw_bypass_l == 1'b0) ? w_rd_data : m_mem_to_write;
+
+    assign o_dmem_towrite = m3;
+
+    assign o_dmem_we = m_is_store;
+
+    wire [15:0] m_dmem_data;
+
+    assign m_dmem_data = i_cur_dmem_data;
+
+
+
+
+    //.............................................finish the nzp part bottom right.....................................
 
 
 
 
 
+
+
+
+
+
+
+
+
+
+
+    //write phase
+    wire [15:0] w_pc;
+    wire [15:0] w_insn;
+    wire [15:0] w_dmem_data;
+    wire [15:0] w_addr;
+    wire [15:0] w_addr_to_write;
+    wire [2:0] m_wsel;
+    wire w_regfile_we;
+    wire w_nzp_we;
+    wire w_is_store;
+    wire w_is_load;
+    wire [1:0] w_stall;
+
+
+    assign test_stall = w_stall;
+    assign test_cur_pc = w_pc;
+    assign test_cur_insn = w_insn;
+    assign test_dmem_data = w_dmem_data;
+
+    assign test_dmem_we = w_is_store;
+
+    wire [15:0] w_rd_data;
+
+    assign w_rd_data = (w_is_load == 1'b0) ? w_dmem_data : w_addr;
+
+    assign test_regfile_data = w_rd_data;
+
+    assign test_nzp_we = w_nzp_we;
+
+    assign test_regfile_we = w_regfile_we;
+
+    assign test_regfile_wsel = w_wsel;
+    assign test_dmem_addr = w_addr_to_write;
 
 
 
