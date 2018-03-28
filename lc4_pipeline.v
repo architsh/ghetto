@@ -141,7 +141,7 @@ module lc4_processor
    //D or recode stage register
    Nbit_reg #(16) d_pc_plus_one_reg (.in(f_pc_plus_one), .out(d_pc_plus_one), .clk(clk), .we(1'b1), .gwe(gwe), .rst(rst));
    Nbit_reg #(16) d_pc_reg (.in(f_pc), .out(d_pc), .clk(clk), .we(1'b1), .gwe(gwe), .rst(rst));
-   Nbit_reg #(16, 16'h0000) d_i_cur_insn_reg (.in(i_cur_insn), .out(d_i_cur_insn), .clk(clk), .we(1'b1), .gwe(gwe), .rst(rst));
+   Nbit_reg #(16) d_i_cur_insn_reg (.in(i_cur_insn), .out(d_i_cur_insn), .clk(clk), .we(1'b1), .gwe(gwe), .rst(rst));
    //decoder module
    lc4_decoder decoder(.insn(d_i_cur_insn), .r1sel(d_r1sel), .r1re(d_r1re), .r2sel(d_r2sel), .r2re(d_r2re), .wsel(d_wsel), .regfile_we(d_regfile_we), .nzp_we(d_nzp_we), .select_pc_plus_one(d_select_pc_plus_one), .is_load(d_is_load), .is_store(d_is_store), .is_branch(d_is_branch), .is_control_insn(d_is_control_insn));
    //regfile
@@ -158,7 +158,8 @@ module lc4_processor
    wire d_is_stall = (x_wsel_eq_d_r1sel | (x_wsel_eq_d_r2sel & ~d_is_store)) & x_is_load;
    // wire d_is_stall = 1'b0;
    wire [15:0] d_insn_update;
-   assign d_insn_update = (d_is_stall) ? 16'b0 : d_i_cur_insn;
+   // assign d_insn_update = (d_is_stall) ? 16'b0 : d_i_cur_insn;
+   assign d_insn_update = d_i_cur_insn;
    wire [1:0] d_stall;
    //changed x_pc_ctl to mux6in.............................................................................................................................................
    assign d_stall = (d_is_stall) ? 2'b11 : ((mux6_in) ? 2'b10 : ((((f_pc == 16'h8200)|(f_pc==16'h0000)) ? 1'b1 : 1'b0) ? 2'b10 : 2'b00));
@@ -261,7 +262,7 @@ module lc4_processor
    assign result_z = (m_alu_out == 16'b0);
    assign nzp_in1 = (result_z == 3'd0) ? nzp_inter : 3'b010;
    Nbit_reg #(3) nzp_reg1 (.out(m_nzp), .in(nzp_in1), .we(m_nzp_we), .rst(rst), .clk(clk), .gwe(gwe));
-   assign nzp_inter1 = (i_cur_dmem_data[15] == 3'd0) ? 3'b001 : 3'b100;
+   assign nzp_inter1 = (i_cur_dmem_data[15] == 1'b0) ? 3'b001 : 3'b100;
    assign result_z1 = (i_cur_dmem_data == 16'b0);
    assign nzp_in2 = (result_z1 == 3'd0) ? nzp_inter1 : 3'b010;
    Nbit_reg #(3) nzp_reg2 (.out(nzp_sel), .in(nzp_in2), .we(m_nzp_we), .rst(rst), .clk(clk), .gwe(gwe));
@@ -269,9 +270,10 @@ module lc4_processor
 
    //..............................................................................................................
    //W or write stage register
+   wire [15:0] i_wdata_w;
    Nbit_reg #(16) w_pc_reg (.in(m_pc), .out(w_pc), .clk(clk), .we(1'b1), .gwe(gwe), .rst(rst));
    Nbit_reg #(16) w_i_cur_insn__reg (.in(m_i_cur_insn), .out(w_i_cur_insn), .clk(clk), .we(1'b1), .gwe(gwe), .rst(rst));
-   Nbit_reg #(16) w_addr_reg (.in(i_wdata_m), .out(w_addr), .clk(clk), .we(1'b1), .gwe(gwe), .rst(rst));
+   Nbit_reg #(16) w_addr_reg (.in(i_wdata_m), .out(i_wdata_w), .clk(clk), .we(1'b1), .gwe(gwe), .rst(rst));
    Nbit_reg #(16) w_i_cur_dmem_data_reg (.in(i_cur_dmem_data), .out(w_i_cur_dmem_data), .clk(clk), .we(1'b1), .gwe(gwe), .rst(rst));
    Nbit_reg #(1) w_regfile_we_reg (.in(m_regfile_we), .out(w_regfile_we), .clk(clk), .we(1'b1), .gwe(gwe), .rst(rst));
    Nbit_reg #(3) w_r1sel_reg (.in(m_r1sel), .out(w_r1sel), .clk(clk), .we(1'b1), .gwe(gwe), .rst(rst));
@@ -291,13 +293,14 @@ module lc4_processor
    //data mem block
    //..............**********CHECK THE MUX CASES COULD BE REVERSE...........
    //((m_is_store | m_is_load) == 1'b0)? 16'h0000:m_alu_out
-   assign i_wdata = (w_is_load == 1'b1) ? w_addr : i_wdata_m;
+
+   assign i_wdata = (w_is_load == 1'b0) ? i_wdata_w : w_i_cur_dmem_data;
    // assign i_wdata = (is_load == 3'd0) ? int_reg_mux : i_cur_dmem_data;
    //assign the tests
    assign test_cur_pc = w_pc;
    assign test_cur_insn = w_i_cur_insn;
    assign test_dmem_data = w_i_cur_dmem_data;
-   assign test_dmem_we = w_is_store;
+   assign test_dmem_we = m_is_store;
    assign test_nzp_we = w_nzp_we;
    assign test_regfile_we = w_regfile_we;
    assign test_regfile_data = i_wdata;
@@ -339,8 +342,19 @@ module lc4_processor
     */
 `ifndef NDEBUG
    always @(posedge gwe) begin
-      $display("%d next_pc->%h f_pc->%h d_pc->%h x_pc->%h m_pc->%h cur_pc->%h d_r1sel->%h d_r2sel->%h d_is_stall->%h d_stall->%h x_wsel->%h mux6in-> %h dmem_addr->%h w_addr->%h nzp_in->%h nzp_out->%h i_wdata->%h ->%h ->%h i_cur_insn->%b  %b \n", $time, next_pc, f_pc, d_pc, x_pc, m_pc, test_cur_pc,d_r1sel, d_r2sel, d_is_stall,d_stall, x_wsel,mux6_in, test_dmem_addr, w_addr,nzp_in, nzp_out,  i_wdata, m_alu_out, i_cur_dmem_data, i_cur_insn, d_i_cur_insn);
-      $display("pc: %h x_pc: %h  m_pc: %h  w_pc: %h o_cur_pc: %h d_pc_plus_one: %h next_pc: %h test_cur_pc: %h alu_out: %b",f_pc, x_pc, m_pc, w_pc, o_cur_pc, d_pc_plus_one, next_pc, test_cur_pc, x_alu_out);
+      // $display("%d next_pc->%h f_pc->%h d_pc->%h x_pc->%h m_pc->%h cur_pc->%h d_r1sel->%h d_r2sel->%h d_is_stall->%h d_stall->%h x_wsel->%h mux6in-> %h dmem_addr->%h w_addr->%h m_nzp->%h nzp_out->%h i_wdata->%h ->%h ->%h i_cur_insn->%b  %b \n", $time, next_pc, f_pc, d_pc, x_pc, m_pc, test_cur_pc,d_r1sel, d_r2sel, d_is_stall,d_stall, x_wsel,mux6_in, test_dmem_addr, w_addr,nzp_in, m_nzp, nzp_out,  i_wdata, m_alu_out, i_cur_dmem_data, i_cur_insn, d_i_cur_insn);
+      // $display("pc: %h x_pc: %h  m_pc: %h  w_pc: %h o_cur_pc: %h d_pc_plus_one: %h next_pc: %h test_cur_pc: %h alu_out: %b i_cur_dmem_data: %h result_z1: %h nzp_inter1: %h nzp_in2: %h nzp_sel: %h w_nzp: %h m_nzp_we: %h i_cur_insn: %h",f_pc, x_pc, m_pc, w_pc, o_cur_pc, d_pc_plus_one, next_pc, test_cur_pc, x_alu_out, i_cur_dmem_data, result_z1, nzp_inter1, nzp_in2, nzp_sel, w_nzp, m_nzp_we, w_i_cur_insn);
+       $display("---------------------------------------------------------------------------------------------------------------------------------------------------------------------");
+       $display("pc: %h d_pc: %h x_pc: %h  m_pc: %h  w_pc: %h o_cur_pc: %h next_pc: %h",f_pc, d_pc, x_pc, m_pc, w_pc, o_cur_pc, next_pc);
+       $display("i_cur_insn: %h d_i_cur_insn: %h d_insn_update: %h w_i_cur_insn: %h",i_cur_insn, d_i_cur_insn, d_insn_update,w_i_cur_insn);
+       $display("i_wdata: %h i_wdata_w: %h w_i_cur_dmem_data: %h i_cur_dmem_data: %h m_alu_out: %h x_alu_out: %h",i_wdata, i_wdata_w, w_i_cur_dmem_data, i_cur_dmem_data, m_alu_out, x_alu_out);
+       $display("alu_in1: %h alu_in2: %h", alu_in1, alu_in2);
+       $display("w_is_load: %h w_is_store: %h",w_is_load, w_is_store);
+       $display("x_o_rs_data: %h x_o_rt_data: %h m_alu_out: %h i_wdata_w: %h",x_o_rs_data, x_o_rt_data, m_alu_out, i_wdata_w);
+       
+       
+
+       // $display("next_pc: %h",f_pc, x_pc, m_pc, w_pc, o_cur_pc, d_pc_plus_one, next_pc);
       //  $display("mux6_in: %h m_nzp: %h nzp_sel: %h nzp_out: %h",mux6_in, m_nzp, nzp_sel, nzp_out);
       // // if (o_dmem_we)  
       //   $display("%d STORE %h <= %h", $time, o_dmem_addr, o_dmem_towrite);
