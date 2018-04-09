@@ -158,8 +158,8 @@ module lc4_processor
    wire d_is_stall = (x_wsel_eq_d_r1sel | (x_wsel_eq_d_r2sel & ~d_is_store)) & x_is_load;
    // wire d_is_stall = 1'b0;
    wire [15:0] d_insn_update;
-   // assign d_insn_update = (d_is_stall) ? 16'b0 : d_i_cur_insn;
-   assign d_insn_update = d_i_cur_insn;
+   assign d_insn_update = (d_is_stall) ? 16'b0 : d_i_cur_insn;
+   // assign d_insn_update = d_i_cur_insn;
    wire [1:0] d_stall;
    //changed x_pc_ctl to mux6in.............................................................................................................................................
    assign d_stall = (d_is_stall) ? 2'b11 : ((mux6_in) ? 2'b10 : ((((f_pc == 16'h8200)|(f_pc==16'h0000)) ? 1'b1 : 1'b0) ? 2'b10 : 2'b00));
@@ -183,18 +183,23 @@ module lc4_processor
    Nbit_reg #(1) x_is_control_insn_reg (.in(d_is_control_insn), .out(x_is_control_insn), .clk(clk), .we(1'b1), .gwe(gwe), .rst(rst));   
    Nbit_reg #(1) x_nzp_we_reg (.in(d_nzp_we), .out(x_nzp_we), .clk(clk), .we(1'b1), .gwe(gwe), .rst(rst));  
    wire [1:0] x_stall;
-   Nbit_reg #(2) x_stall_reg (.in(d_stall), .out(x_stall), .clk(clk), .we(1'b1), .gwe(gwe), .rst(rst));  
+   wire x_r1re;
+   wire x_r2re;
+   Nbit_reg #(2) x_stall_reg (.in(d_stall), .out(x_stall), .clk(clk), .we(1'b1), .gwe(gwe), .rst(rst)); 
+   Nbit_reg #(1) x_r1re_reg (.in(d_r1re), .out(x_r1re), .clk(clk), .we(1'b1), .gwe(gwe), .rst(rst));    
+   Nbit_reg #(1) x_r2re_reg (.in(d_r2re), .out(x_r2re), .clk(clk), .we(1'b1), .gwe(gwe), .rst(rst));    
    //x_bp_logic1 block
    assign pd1 = (x_r1sel == w_wsel) ? 1'b1 : 1'b0;
    assign pd2 = (x_r1sel == m_wsel) ? 1'b1 : 1'b0;
-   assign d1 = pd1 & w_regfile_we;
-   assign d2 = pd2 & m_regfile_we;
+
+   assign d1 = pd1 & w_regfile_we & x_r1re;
+   assign d2 = pd2 & m_regfile_we & x_r1re;
    assign x_bp_logic1 = ((d1 == 1'b0) & (d2 ==1'b0)) ? 2'b00 : (d1 == 1'b0) & (d2 ==1'b1) ? 2'b01 : (d1 == 1'b1) & (d2 ==1'b0) ? 2'b10 : 2'b11;
    //x_bp_logic2 block
    assign pd3 = (x_r2sel == w_wsel) ? 1'b1 : 1'b0;
    assign pd4 = (x_r2sel == m_wsel) ? 1'b1 : 1'b0;
-   assign d3 = pd3 & w_regfile_we;
-   assign d4 = pd4 & m_regfile_we;
+   assign d3 = pd3 & w_regfile_we & x_r2re;
+   assign d4 = pd4 & m_regfile_we & x_r2re;
    assign x_bp_logic2 = ((d3 == 1'b0) & (d4 ==1'b0)) ? 2'b00 : (d3 == 1'b0) & (d4 ==1'b1) ? 2'b01 : (d3 == 1'b1) & (d4 ==1'b0) ? 2'b10 : 2'b11;
    //................HAVENT DONE THE SIGN EXT THING***************
    //alu_in1 block
@@ -230,8 +235,10 @@ module lc4_processor
    Nbit_reg #(1) m_is_control_insn_reg (.in(x_is_control_insn), .out(m_is_control_insn), .clk(clk), .we(1'b1), .gwe(gwe), .rst(rst));
    Nbit_reg #(1) m_nzp_we_reg (.in(x_nzp_we), .out(m_nzp_we), .clk(clk), .we(1'b1), .gwe(gwe), .rst(rst));
    wire [1:0] m_stall;
-   Nbit_reg #(2) m_stall_reg (.in(x_stall), .out(m_stall), .clk(clk), .we(1'b1), .gwe(gwe), .rst(rst));  
 
+   Nbit_reg #(2) m_stall_reg (.in(x_stall), .out(m_stall), .clk(clk), .we(1'b1), .gwe(gwe), .rst(rst)); 
+   // Nbit_reg #(16) m_r1re_reg (.in(x_r1re), .out(m_r1re), .clk(clk), .we(1'b1), .gwe(gwe), .rst(rst));     
+   // Nbit_reg #(16) m_r1re_reg (.in(x_r1re), .out(m_r1re), .clk(clk), .we(1'b1), .gwe(gwe), .rst(rst));     
    //next pc
    assign i_wdata_m = (d_select_pc_plus_one == 1'b0) ? m_alu_out : m_pc_plus_one;
    //mw bp logic
@@ -351,6 +358,9 @@ module lc4_processor
        $display("alu_in1: %h alu_in2: %h", alu_in1, alu_in2);
        $display("w_is_load: %h w_is_store: %h",w_is_load, w_is_store);
        $display("x_o_rs_data: %h x_o_rt_data: %h m_alu_out: %h i_wdata_w: %h",x_o_rs_data, x_o_rt_data, m_alu_out, i_wdata_w);
+
+       pinstr(x_i_cur_insn);
+       pinstr(w_i_cur_insn);
        
        
 
