@@ -70,21 +70,24 @@ module lc4_processor
    //wire [2:0] w_wsel;
    wire w_is_store, w_is_load;
    wire w_nzp_we;
-
+   wire change_pc;
+   wire stall_we;
    // Fetch Register Stage ...................................................................................................
    
-   wire [15:0]   f_pc, next_pc, f_pc_plus_one;
+   wire [15:0] f_pc, next_pc, f_pc_plus_one;
 
    // Program counter register, starts at 8200h at bootup
    Nbit_reg #(16, 16'h8200) f_pc_reg (.in(next_pc), .out(f_pc), .clk(clk), .we(stall_we), .gwe(gwe), .rst(rst));
    assign f_pc_plus_one = o_cur_pc + 16'd1;
    assign o_cur_pc = f_pc;
-   assign stall_we = ~load_to_use
+   assign stall_we = ~load_to_use;
 
 
    // Decode Register Stage ..................................................................................................
    
-   wire [15:0] d_pc, d_i_cur_insn, d_pc_plus_one;
+   wire [15:0] d_pc; 
+   wire [15:0] d_i_cur_insn;
+   wire [15:0] d_pc_plus_one;
    wire [15:0] d_o_rs_data, d_o_rt_data;
    wire [2:0] d_r1sel, d_r2sel, d_wsel;
    wire d_r1re, d_r2re, d_regfile_we, d_nzp_we, d_select_pc_plus_one, d_is_store, d_is_load, d_is_branch, d_is_control_insn;
@@ -119,7 +122,7 @@ module lc4_processor
 
    wire x_load_to_use;
 
-   wire [15:0] d_i_cur_insn_update == (change_pc | load_to_use) ? 16'b0 : d_i_cur_insn;
+   wire [15:0] d_i_cur_insn_update = (change_pc | load_to_use) ? 16'b0 : d_i_cur_insn;
 
    wire [2:0] d_wsel_change = (change_pc | load_to_use) ?  3'b0 : d_wsel;
    wire d_regfile_we_change = (change_pc | load_to_use) ?  1'b0 : d_regfile_we;
@@ -166,7 +169,7 @@ module lc4_processor
    assign x_bp_logic1 = d3 ? 2'b11 : (d2 ? 2'b01 : d1 ? 2'b10 : 2'b00); 
 
   // x_bp_logic2 block
-   assign d3 = (x_r2sel == m_wsel) & _regfile_we;
+   assign d3 = (x_r2sel == m_wsel) & m_regfile_we;
    assign d4 = (x_r2sel == w_wsel) & w_regfile_we;
    assign d6 = (x_r2sel == w1_wsel) & w1_regfile_we;
    assign x_bp_logic2 = d3 ? 2'b11 : (d2 ? 2'b01 : d1 ? 2'b10 : 2'b00);
@@ -224,12 +227,12 @@ module lc4_processor
    wire b;
    assign a = (m_r2sel == w_wsel);
    assign b = (m_is_store & w_is_load);
-   assign o_dmem_towrite = (a & b) i_wdata_w : m_alu_in2;
+   assign o_dmem_towrite = (a & b) ? i_wdata_w : m_alu_in2;
 
    //next_pc
    wire data_inter;
-   assign data_inter = (m_is_load) i_cur_dmem_data : m_alu_out;
-   assign i_wdata_m = (m_select_pc_plus_one) m_pc_plus_one : data_inter;
+   assign data_inter = (m_is_load) ? i_cur_dmem_data : m_alu_out;
+   assign i_wdata_m = (m_select_pc_plus_one) ? m_pc_plus_one : data_inter;
 
    //nzp
    wire [2:0] m_nzp;
@@ -244,21 +247,25 @@ module lc4_processor
    assign m_nzp = (i_wdata_m [15]) ? 3'b100 : nzp_int1;
 
    //nzp final
+   wire [2:0] nzp_sel;
    assign nzp_sel = (m_regfile_we) ? m_nzp : x_nzp;
 
   //..............................................................................................................
    //W or write stage register
    wire [15:0] i_wdata_w;
-   wire [15:0] m_alu_out;
+   // wire [15:0] m_alu_out;
    wire w_is_branch;
    wire w_select_pc_plus_one;
    wire w_load_to_use;
    wire [15:0] w_o_dmem_towrite;
+   wire [15:0] w_alu_out;
+   wire [2:0] w_nzp;
+   wire w_is_control_insn;
     
    
    Nbit_reg #(16) w_i_cur_dmem_data_reg (.in(i_cur_dmem_data), .out(w_i_cur_dmem_data), .clk(clk), .we(1'b1), .gwe(gwe), .rst(rst));
    Nbit_reg #(16) w_alu_out_reg (.in(m_alu_out), .out(w_alu_out), .clk(clk), .we(1'b1), .gwe(gwe), .rst(rst));
-   Nbit_reg #(1) m_load_to_use_reg (.in(m_load_to_use), .out(w_load_to_use), .clk(clk), .we(1'b1), .gwe(gwe), .rst(rst));
+   Nbit_reg #(1) w_load_to_use_reg (.in(m_load_to_use), .out(w_load_to_use), .clk(clk), .we(1'b1), .gwe(gwe), .rst(rst));
    Nbit_reg #(3) w_nzp_reg (.in(nzp_sel), .out(w_nzp), .clk(clk), .we(1'b1), .gwe(gwe), .rst(rst));   
    Nbit_reg #(16) w_dmem_towrite_reg (.in(o_dmem_towrite), .out(w_o_dmem_towrite), .clk(clk), .we(1'b1), .gwe(gwe), .rst(rst));
 
@@ -280,7 +287,7 @@ module lc4_processor
 
    //additional registers
    wire [2:0] w1_wsel;
-   wire w1_wsel_reg;
+   wire w1_regfile_we;
    wire [15:0] i_wdata_w1;
    Nbit_reg #(3) w1_wsel_reg (.in(w_wsel), .out(w1_wsel), .clk(clk), .we(1'b1), .gwe(gwe), .rst(rst));
    Nbit_reg #(1) w1_regfile_we_reg (.in(w_regfile_we), .out(w1_regfile_we), .clk(clk), .we(1'b1), .gwe(gwe), .rst(rst)); 
@@ -316,7 +323,7 @@ module lc4_processor
    always @(posedge gwe) begin
        $display("---------------------------------------------------------------------------------------------------------------------------------------------------------------------");
        $display("pc: %h d_pc: %h x_pc: %h  m_pc: %h  w_pc: %h o_cur_pc: %h next_pc: %h",f_pc, d_pc, x_pc, m_pc, w_pc, o_cur_pc, next_pc);
-       $display("i_cur_insn: %h d_i_cur_insn: %h d_insn_update: %h w_i_cur_insn: %h",i_cur_insn, d_i_cur_insn, d_insn_update,w_i_cur_insn);
+       // $display("i_cur_insn: %h d_i_cur_insn: %h d_insn_update: %h w_i_cur_insn: %h",i_cur_insn, d_i_cur_insn, d_insn_update,w_i_cur_insn);
        $display("i_wdata: %h i_wdata_w: %h w_i_cur_dmem_data: %h i_cur_dmem_data: %h m_alu_out: %h x_alu_out: %h",i_wdata, i_wdata_w, w_i_cur_dmem_data, i_cur_dmem_data, m_alu_out, x_alu_out);
        $display("alu_in1: %h alu_in2: %h", alu_in1, alu_in2);
        $display("w_is_load: %h w_is_store: %h",w_is_load, w_is_store);
